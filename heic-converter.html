@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEIC → JPG/PNG 変換ツール</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .format-selector {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .format-option {
+            position: relative;
+        }
+
+        .format-option input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+        }
+
+        .format-option label {
+            display: block;
+            padding: 12px 30px;
+            background: #f0f0f0;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        .format-option input[type="radio"]:checked + label {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .upload-area {
+            border: 3px dashed #ddd;
+            border-radius: 15px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 20px;
+        }
+
+        .upload-area:hover,
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #f8f8ff;
+        }
+
+        .upload-area.dragover {
+            transform: scale(1.02);
+        }
+
+        .upload-icon {
+            font-size: 60px;
+            margin-bottom: 15px;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .upload-hint {
+            color: #999;
+            font-size: 13px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .file-list {
+            margin-top: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .file-item {
+            background: #f8f8f8;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .file-info {
+            flex: 1;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .file-status {
+            font-size: 13px;
+            color: #666;
+        }
+
+        .file-status.converting {
+            color: #667eea;
+        }
+
+        .file-status.success {
+            color: #4caf50;
+        }
+
+        .file-status.error {
+            color: #f44336;
+        }
+
+        .download-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .download-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .convert-all-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: all 0.3s;
+        }
+
+        .convert-all-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .convert-all-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 24px;
+            }
+
+            .format-selector {
+                gap: 10px;
+            }
+
+            .format-option label {
+                padding: 10px 20px;
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📸 HEIC 変換ツール</h1>
+        <p class="subtitle">iPhoneの写真をJPGやPNGに簡単変換</p>
+
+        <div class="format-selector">
+            <div class="format-option">
+                <input type="radio" id="jpg" name="format" value="image/jpeg" checked>
+                <label for="jpg">JPG</label>
+            </div>
+            <div class="format-option">
+                <input type="radio" id="png" name="format" value="image/png">
+                <label for="png">PNG</label>
+            </div>
+        </div>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">ここにHEICファイルをドロップ</div>
+            <div class="upload-hint">または クリックしてファイルを選択</div>
+        </div>
+
+        <input type="file" id="fileInput" accept=".heic,.HEIC" multiple>
+
+        <div class="file-list" id="fileList"></div>
+
+        <button class="convert-all-btn" id="convertAllBtn" disabled>
+            すべて変換してダウンロード
+        </button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const convertAllBtn = document.getElementById('convertAllBtn');
+        let files = [];
+        let convertedBlobs = new Map();
+
+        // アップロードエリアのクリック
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // ファイル選択
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // ドラッグ&ドロップ
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        function handleFiles(newFiles) {
+            files = [...files, ...Array.from(newFiles)];
+            renderFileList();
+            convertAllBtn.disabled = false;
+        }
+
+        function renderFileList() {
+            fileList.innerHTML = '';
+            files.forEach((file, index) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.innerHTML = `
+                    <div class="file-info">
+                        <div class="file-name">${file.name}</div>
+                        <div class="file-status" id="status-${index}">待機中</div>
+                        <div class="progress-bar" id="progress-${index}" style="display:none;">
+                            <div class="progress-fill"></div>
+                        </div>
+                    </div>
+                    <button class="download-btn" id="download-${index}" disabled>
+                        ダウンロード
+                    </button>
+                `;
+                fileList.appendChild(item);
+            });
+        }
+
+        async function convertFile(file, index) {
+            const statusEl = document.getElementById(`status-${index}`);
+            const progressEl = document.getElementById(`progress-${index}`);
+            const downloadBtn = document.getElementById(`download-${index}`);
+
+            try {
+                statusEl.textContent = '変換中...';
+                statusEl.className = 'file-status converting';
+                progressEl.style.display = 'block';
+
+                const format = document.querySelector('input[name="format"]:checked').value;
+                const extension = format === 'image/jpeg' ? 'jpg' : 'png';
+
+                const convertedBlob = await heic2any({
+                    blob: file,
+                    toType: format,
+                    quality: 0.9
+                });
+
+                const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                convertedBlobs.set(index, blob);
+
+                statusEl.textContent = '✓ 変換完了';
+                statusEl.className = 'file-status success';
+                downloadBtn.disabled = false;
+
+                const originalName = file.name.replace(/\.[^/.]+$/, '');
+                downloadBtn.onclick = () => downloadFile(blob, `${originalName}.${extension}`);
+
+            } catch (error) {
+                console.error('変換エラー:', error);
+                statusEl.textContent = '✗ エラー: ' + error.message;
+                statusEl.className = 'file-status error';
+            } finally {
+                progressEl.style.display = 'none';
+            }
+        }
+
+        function downloadFile(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        convertAllBtn.addEventListener('click', async () => {
+            convertAllBtn.disabled = true;
+            convertAllBtn.textContent = '変換中...';
+
+            for (let i = 0; i < files.length; i++) {
+                await convertFile(files[i], i);
+            }
+
+            convertAllBtn.textContent = '完了！';
+
+            setTimeout(() => {
+                convertAllBtn.textContent = 'すべて変換してダウンロード';
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
