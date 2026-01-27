@@ -262,7 +262,7 @@
             <div class="upload-hint">または クリックしてファイルを選択</div>
         </div>
 
-        <input type="file" id="fileInput" accept=".heic,.HEIC" multiple>
+        <input type="file" id="fileInput" accept=".heic,.HEIC,.heif,.HEIF,image/heic,image/heif" multiple>
 
         <div class="file-list" id="fileList"></div>
 
@@ -271,7 +271,7 @@
         </button>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+    <script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"></script>
     <script>
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
@@ -279,6 +279,13 @@
         const convertAllBtn = document.getElementById('convertAllBtn');
         let files = [];
         let convertedBlobs = new Map();
+
+        // ライブラリの読み込み確認
+        window.addEventListener('load', () => {
+            if (typeof heic2any === 'undefined') {
+                alert('エラー: 変換ライブラリの読み込みに失敗しました。ページを再読み込みしてください。');
+            }
+        });
 
         // アップロードエリアのクリック
         uploadArea.addEventListener('click', () => {
@@ -339,6 +346,17 @@
             const downloadBtn = document.getElementById(`download-${index}`);
 
             try {
+                // ライブラリの存在確認
+                if (typeof heic2any === 'undefined') {
+                    throw new Error('変換ライブラリが読み込まれていません');
+                }
+
+                // ファイルタイプの確認
+                const fileName = file.name.toLowerCase();
+                if (!fileName.endsWith('.heic') && !fileName.endsWith('.heif')) {
+                    throw new Error('HEICまたはHEIFファイルを選択してください');
+                }
+
                 statusEl.textContent = '変換中...';
                 statusEl.className = 'file-status converting';
                 progressEl.style.display = 'block';
@@ -364,7 +382,17 @@
 
             } catch (error) {
                 console.error('変換エラー:', error);
-                statusEl.textContent = '✗ エラー: ' + error.message;
+                let errorMsg = 'エラーが発生しました';
+
+                if (error.message.includes('not supported')) {
+                    errorMsg = 'このファイル形式はサポートされていません';
+                } else if (error.message.includes('not a HEIC')) {
+                    errorMsg = '有効なHEICファイルではありません';
+                } else if (error.message) {
+                    errorMsg = error.message;
+                }
+
+                statusEl.textContent = '✗ ' + errorMsg;
                 statusEl.className = 'file-status error';
             } finally {
                 progressEl.style.display = 'none';
