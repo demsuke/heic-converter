@@ -220,6 +220,13 @@
             cursor: not-allowed;
         }
 
+        .loading-message {
+            text-align: center;
+            color: #667eea;
+            padding: 20px;
+            font-size: 14px;
+        }
+
         @media (max-width: 600px) {
             .container {
                 padding: 25px;
@@ -245,47 +252,61 @@
         <h1>📸 HEIC 変換ツール</h1>
         <p class="subtitle">iPhoneの写真をJPGやPNGに簡単変換</p>
 
-        <div class="format-selector">
-            <div class="format-option">
-                <input type="radio" id="jpg" name="format" value="image/jpeg" checked>
-                <label for="jpg">JPG</label>
+        <div id="loadingMessage" class="loading-message">変換エンジンを読み込み中...</div>
+
+        <div id="mainContent" style="display:none;">
+            <div class="format-selector">
+                <div class="format-option">
+                    <input type="radio" id="jpg" name="format" value="jpeg" checked>
+                    <label for="jpg">JPG</label>
+                </div>
+                <div class="format-option">
+                    <input type="radio" id="png" name="format" value="png">
+                    <label for="png">PNG</label>
+                </div>
             </div>
-            <div class="format-option">
-                <input type="radio" id="png" name="format" value="image/png">
-                <label for="png">PNG</label>
+
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div class="upload-text">ここにHEICファイルをドロップ</div>
+                <div class="upload-hint">または クリックしてファイルを選択</div>
             </div>
+
+            <input type="file" id="fileInput" accept=".heic,.HEIC,.heif,.HEIF,image/heic,image/heif" multiple>
+
+            <div class="file-list" id="fileList"></div>
+
+            <button class="convert-all-btn" id="convertAllBtn" disabled>
+                すべて変換してダウンロード
+            </button>
         </div>
-
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📁</div>
-            <div class="upload-text">ここにHEICファイルをドロップ</div>
-            <div class="upload-hint">または クリックしてファイルを選択</div>
-        </div>
-
-        <input type="file" id="fileInput" accept=".heic,.HEIC,.heif,.HEIF,image/heic,image/heif" multiple>
-
-        <div class="file-list" id="fileList"></div>
-
-        <button class="convert-all-btn" id="convertAllBtn" disabled>
-            すべて変換してダウンロード
-        </button>
     </div>
 
-    <script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"></script>
-    <script>
+    <script type="module">
+        import libheif from 'https://cdn.jsdelivr.net/npm/libheif-js@1.18.2/+esm';
+
+        let decoder = null;
+
+        // デコーダーを初期化
+        async function initDecoder() {
+            try {
+                decoder = await libheif.HeifDecoder();
+                document.getElementById('loadingMessage').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+            } catch (error) {
+                console.error('デコーダーの初期化エラー:', error);
+                document.getElementById('loadingMessage').textContent =
+                    'エラー: 変換エンジンの読み込みに失敗しました。ページを再読み込みしてください。';
+                document.getElementById('loadingMessage').style.color = '#f44336';
+            }
+        }
+
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
         const fileList = document.getElementById('fileList');
         const convertAllBtn = document.getElementById('convertAllBtn');
         let files = [];
         let convertedBlobs = new Map();
-
-        // ライブラリの読み込み確認
-        window.addEventListener('load', () => {
-            if (typeof heic2any === 'undefined') {
-                alert('エラー: 変換ライブラリの読み込みに失敗しました。ページを再読み込みしてください。');
-            }
-        });
 
         // アップロードエリアのクリック
         uploadArea.addEventListener('click', () => {
@@ -346,12 +367,10 @@
             const downloadBtn = document.getElementById(`download-${index}`);
 
             try {
-                // ライブラリの存在確認
-                if (typeof heic2any === 'undefined') {
-                    throw new Error('変換ライブラリが読み込まれていません');
+                if (!decoder) {
+                    throw new Error('変換エンジンが初期化されていません');
                 }
 
-                // ファイルタイプの確認
                 const fileName = file.name.toLowerCase();
                 if (!fileName.endsWith('.heic') && !fileName.endsWith('.heif')) {
                     throw new Error('HEICまたはHEIFファイルを選択してください');
@@ -362,15 +381,48 @@
                 progressEl.style.display = 'block';
 
                 const format = document.querySelector('input[name="format"]:checked').value;
-                const extension = format === 'image/jpeg' ? 'jpg' : 'png';
+                const extension = format === 'jpeg' ? 'jpg' : 'png';
 
-                const convertedBlob = await heic2any({
-                    blob: file,
-                    toType: format,
-                    quality: 0.9
+                // ファイルをArrayBufferとして読み込む
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+
+                // HEICをデコード
+                const images = decoder.decode(uint8Array);
+                if (!images || images.length === 0) {
+                    throw new Error('画像のデコードに失敗しました');
+                }
+
+                const image = images[0];
+                const width = image.get_width();
+                const height = image.get_height();
+
+                // RGBAデータを取得
+                const rgbaData = await new Promise((resolve, reject) => {
+                    image.display({ data: new Uint8ClampedArray(width * height * 4), width, height },
+                        (displayData) => {
+                            if (!displayData) {
+                                reject(new Error('画像データの取得に失敗しました'));
+                                return;
+                            }
+                            resolve(displayData.data);
+                        }
+                    );
                 });
 
-                const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+                // Canvasで変換
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                const imageData = new ImageData(rgbaData, width, height);
+                ctx.putImageData(imageData, 0, 0);
+
+                // BlobとしてPNG変換
+                const blob = await new Promise((resolve) => {
+                    canvas.toBlob((b) => resolve(b), `image/${format}`, 0.95);
+                });
+
                 convertedBlobs.set(index, blob);
 
                 statusEl.textContent = '✓ 変換完了';
@@ -382,16 +434,7 @@
 
             } catch (error) {
                 console.error('変換エラー:', error);
-                let errorMsg = 'エラーが発生しました';
-
-                if (error.message.includes('not supported')) {
-                    errorMsg = 'このファイル形式はサポートされていません';
-                } else if (error.message.includes('not a HEIC')) {
-                    errorMsg = '有効なHEICファイルではありません';
-                } else if (error.message) {
-                    errorMsg = error.message;
-                }
-
+                let errorMsg = error.message || 'エラーが発生しました';
                 statusEl.textContent = '✗ ' + errorMsg;
                 statusEl.className = 'file-status error';
             } finally {
@@ -424,6 +467,9 @@
                 convertAllBtn.textContent = 'すべて変換してダウンロード';
             }, 2000);
         });
+
+        // デコーダーを初期化
+        initDecoder();
     </script>
 </body>
 </html>
